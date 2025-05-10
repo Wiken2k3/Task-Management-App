@@ -1,114 +1,188 @@
 import React, { useState, useEffect } from "react";
-import "./index.css";
+import { gsap } from "gsap";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import "./App.css";
 
 function App() {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [posts, setPosts] = useState([]);
-  const [editingPostId, setEditingPostId] = useState(null);
-  const [modalContent, setModalContent] = useState(null);
+  const [tasks, setTasks] = useState(() => {
+    const saved = localStorage.getItem("todo-list");
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  // Load dữ liệu từ LocalStorage khi khởi động
+  const [input, setInput] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [difficulty, setDifficulty] = useState("medium");
+  const [editingId, setEditingId] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
+  const [sortOrder, setSortOrder] = useState("asc");
+
   useEffect(() => {
-    const savedPosts = JSON.parse(localStorage.getItem("posts"));
-    if (savedPosts) setPosts(savedPosts);
-  }, []);
+    localStorage.setItem("todo-list", JSON.stringify(tasks));
+  }, [tasks]);
 
-  // Lưu dữ liệu mỗi khi posts thay đổi
-  useEffect(() => {
-    localStorage.setItem("posts", JSON.stringify(posts));
-  }, [posts]);
+  const handleAddOrUpdate = () => {
+    if (!input.trim()) return;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
-
-    if (editingPostId) {
-      setPosts(posts.map(post =>
-        post.id === editingPostId ? { ...post, title, content } : post
+    if (editingId) {
+      setTasks(tasks.map(task =>
+        task.id === editingId
+          ? { ...task, text: input, deadline, difficulty }
+          : task
       ));
-      setEditingPostId(null);
+      toast.info("✏️ Task updated");
     } else {
-      const newPost = {
+      const newTask = {
         id: Date.now(),
-        title,
-        content,
+        text: input,
+        completed: false,
+        completedAt: null,
+        createdAt: new Date().toISOString(),
+        deadline,
+        difficulty,
       };
-      setPosts([newPost, ...posts]);
+      setTasks([newTask, ...tasks]);
+      gsap.from(".task-card", { opacity: 0, y: -20, duration: 0.4 });
+      toast.success("✅ Task added!");
     }
 
-    setTitle("");
-    setContent("");
+    setInput("");
+    setDeadline("");
+    setDifficulty("medium");
+    setEditingId(null);
+  };
+
+  const handleComplete = (id) => {
+    const now = new Date();
+    setTasks(tasks.map(task => {
+      if (task.id === id) {
+        const completedAt = now.toISOString();
+        const status = new Date(task.deadline) >= now ? "On time" : "Late";
+        toast.success(`✅ Marked complete (${status})`);
+        return { ...task, completed: true, completedAt };
+      }
+      return task;
+    }));
   };
 
   const handleDelete = (id) => {
-    setPosts(posts.filter((post) => post.id !== id));
+    toast.warn("🗑️ Task deleted");
+    setTasks(tasks.filter(t => t.id !== id));
   };
 
-  const handleEdit = (post) => {
-    setTitle(post.title);
-    setContent(post.content);
-    setEditingPostId(post.id);
+  const handleEdit = (task) => {
+    setEditingId(task.id);
+    setInput(task.text);
+    setDeadline(task.deadline);
+    setDifficulty(task.difficulty);
   };
 
-  const handleViewDetails = (post) => {
-    setModalContent(post);
-  };
+  const toggleDarkMode = () => setDarkMode(prev => !prev);
 
-  const closeModal = () => {
-    setModalContent(null);
-  };
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const aTime = new Date(a.deadline).getTime();
+    const bTime = new Date(b.deadline).getTime();
+    return sortOrder === "asc" ? aTime - bTime : bTime - aTime;
+  });
+
+  const filteredTasks = sortedTasks
+    .filter(t => (filter === "all" ? true : t.difficulty === filter))
+    .filter(t => t.text.toLowerCase().includes(search.toLowerCase()));
+
+  const todoTasks = filteredTasks.filter(t => !t.completed);
+  const doneTasks = filteredTasks.filter(t => t.completed);
 
   return (
-    <div className="container">
-      <h1 className="title">📝 Viết bài Blog của bạn</h1>
+      <div className={`app ${darkMode ? "dark" : ""}`}>
+        <ToastContainer />
+        <div className="top-bar">
+          <h1>📋 Task Management App</h1>
+          <button onClick={toggleDarkMode}>
+            {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+          </button>
+        </div>
 
-      <form onSubmit={handleSubmit} className="blog-form">
-        <input
-          type="text"
-          placeholder="Tiêu đề bài viết"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="blog-input"
-        />
-        <textarea
-          placeholder="Nội dung bài viết"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="blog-textarea"
-        />
-        <button type="submit" className="blog-button">
-          {editingPostId ? "Cập nhật bài viết" : "Đăng bài"}
-        </button>
-      </form>
+        <div className="stats">
+          <p>Total: {tasks.length}</p>
+          <p>To do: {todoTasks.length}</p>
+          <p>Completed: {doneTasks.length}</p>
+        </div>
 
-      <h2 className="section-title">📚 Danh sách bài viết</h2>
-      <ul className="post-list">
-        {posts.map((post) => (
-          <li key={post.id} className="post-item">
-            <h3 className="post-title">{post.title}</h3>
-            <p className="post-content">
-              {post.content.length > 100 ? post.content.slice(0, 100) + "..." : post.content}
-            </p>
-            <div className="action-buttons">
-              <button onClick={() => handleDelete(post.id)} className="btn red">Xoá</button>
-              <button onClick={() => handleEdit(post)} className="btn yellow">Sửa</button>
-              <button onClick={() => handleViewDetails(post)} className="btn blue">Xem chi tiết</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+        <div className="form">
+          <input
+            type="text"
+            placeholder="Enter task..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+          <input
+            type="date"
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value)}
+          />
+          <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button onClick={handleAddOrUpdate}>
+            {editingId ? "Update" : "Add"}
+          </button>
+        </div>
 
-      {modalContent && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>{modalContent.title}</h3>
-            <p>{modalContent.content}</p>
-            <button className="btn" onClick={closeModal}>Đóng</button>
+        <div className="filters">
+          <input
+            type="text"
+            placeholder="Search task..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="all">All levels</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+            <option value="asc">Mới nhất</option>
+            <option value="desc">Lâu nhất</option>
+          </select>
+        </div>
+
+        <div className="columns">
+          <div>
+            <h3>🕓 To Do</h3>
+            {todoTasks.map(task => (
+              <div key={task.id} className="task-card">
+                <h4>{task.text}</h4>
+                <p>Due: {task.deadline}</p>
+                <p>Level: {task.difficulty}</p>
+                <div className="btns">
+                  <button onClick={() => handleComplete(task.id)}>✔</button>
+                  <button onClick={() => handleEdit(task)}>✏</button>
+                  <button onClick={() => handleDelete(task.id)}>❌</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <h3>✅ Completed</h3>
+            {doneTasks.map(task => (
+              <div key={task.id} className="task-card done">
+                <h4>{task.text}</h4>
+                <p>Done: {new Date(task.completedAt).toLocaleString()}</p>
+                <p>{new Date(task.completedAt) <= new Date(task.deadline) ? "⏱️ On time" : "⚠️ Late"}</p>
+                <p>Level: {task.difficulty}</p>
+                <button onClick={() => handleDelete(task.id)}>❌</button>
+              </div>
+            ))}
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    
   );
 }
 
